@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_report_batch_payment" model="ir.actions.report">
+        <field name="name">Batch Payment</field>
+        <field name="model">account.batch.payment</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">batch_payment.report_batch_payment_document</field>
+        <field name="report_file">batch_payment.report_batch_payment_document</field>
+        <field name="binding_model_id" ref="model_account_batch_payment"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <template id="report_batch_payment_document">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <div class="oe_structure"/>
+                        
+                        <h2 class="mt-4">
+                            <span t-if="o.batch_type == 'outbound'">Batch Payment to Suppliers</span>
+                            <span t-if="o.batch_type == 'inbound'">Batch Payment from Customers</span>
+                        </h2>
+
+                        <div class="row mt-4 mb-4">
+                            <div class="col-6">
+                                <strong>Reference:</strong>
+                                <p t-field="o.name"/>
+                            </div>
+                            <div class="col-6">
+                                <strong>Date:</strong>
+                                <p t-field="o.date"/>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-6">
+                                <strong>Bank Journal:</strong>
+                                <p t-field="o.journal_id.name"/>
+                            </div>
+                            <div class="col-6">
+                                <strong>Payment Method:</strong>
+                                <p t-field="o.payment_method_id.name"/>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-6">
+                                <strong>Status:</strong>
+                                <p>
+                                    <span t-if="o.state == 'draft'" class="badge badge-info">Draft</span>
+                                    <span t-if="o.state == 'validated'" class="badge badge-success">Validated</span>
+                                    <span t-if="o.state == 'reconciled'" class="badge badge-secondary">Reconciled</span>
+                                </p>
+                            </div>
+                            <div class="col-6">
+                                <strong>Currency:</strong>
+                                <p t-field="o.currency_id.name"/>
+                            </div>
+                        </div>
+
+                        <h3 class="mt-5 mb-3">Payment Details</h3>
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Partner</th>
+                                    <th>Reference</th>
+                                    <th class="text-right">Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="o.payment_ids" t-as="payment">
+                                    <td>
+                                        <span t-field="payment.date"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="payment.partner_id.name"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="payment.ref"/>
+                                    </td>
+                                    <td class="text-right">
+                                        <span t-field="payment.amount" t-options="{'widget': 'monetary', 'display_currency': payment.currency_id}"/>
+                                    </td>
+                                    <td>
+                                        <span t-if="payment.state == 'draft'">Draft</span>
+                                        <span t-if="payment.state == 'posted'">Posted</span>
+                                        <span t-if="payment.state == 'reconciled'">Reconciled</span>
+                                        <span t-if="payment.state == 'cancelled'">Cancelled</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="row mt-4">
+                            <div class="col-6 offset-6">
+                                <table class="table table-sm">
+                                    <tr class="border-black">
+                                        <td><strong>Total Amount</strong></td>
+                                        <td class="text-right">
+                                            <strong>
+                                                <span t-field="o.amount_total" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
+                                            </strong>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="row mt-5">
+                            <div class="col-12">
+                                <p><strong>Total Payments:</strong> <span t-esc="o.payment_count"/></p>
+                            </div>
+                        </div>
+
+                        <div class="oe_structure"/>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

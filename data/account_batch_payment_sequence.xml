@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Sequence for Outbound Batch Payments -->
+        <record id="seq_account_batch_payment_out" model="ir.sequence">
+            <field name="name">Batch Payment Out</field>
+            <field name="code">account.batch.payment.out</field>
+            <field name="prefix">BATCH/OUT/%(range_year)s/</field>
+            <field name="padding">4</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <!-- Sequence for Inbound Batch Payments -->
+        <record id="seq_account_batch_payment_in" model="ir.sequence">
+            <field name="name">Batch Payment In</field>
+            <field name="code">account.batch.payment.in</field>
+            <field name="prefix">BATCH/IN/%(range_year)s/</field>
+            <field name="padding">4</field>
+            <field name="company_id" eval="False"/>
+        </record>
+    </data>
+</odoo>

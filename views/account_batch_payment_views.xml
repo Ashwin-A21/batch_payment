@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_account_batch_payment_tree" model="ir.ui.view">
+        <field name="name">account.batch.payment.tree</field>
+        <field name="model">account.batch.payment</field>
+        <field name="arch" type="xml">
+            <tree string="Batch Payments" decoration-info="state == 'draft'" decoration-muted="state == 'reconciled'">
+                <field name="name"/>
+                <field name="date"/>
+                <field name="batch_type"/>
+                <field name="journal_id"/>
+                <field name="payment_method_id"/>
+                <field name="payment_count"/>
+                <field name="amount_total"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="state" widget="badge" decoration-info="state == 'draft'" decoration-success="state == 'validated'" decoration-muted="state == 'reconciled'"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_account_batch_payment_form" model="ir.ui.view">
+        <field name="name">account.batch.payment.form</field>
+        <field name="model">account.batch.payment</field>
+        <field name="arch" type="xml">
+            <form string="Batch Payment">
+                <header>
+                    <button name="action_validate_batch" string="Validate" type="object" 
+                            invisible="state != 'draft'" class="oe_highlight"/>
+                    <button name="action_draft" string="Reset to Draft" type="object" 
+                            invisible="state not in ['validated', 'reconciled']" groups="account.group_account_manager"/>
+                    <button name="action_print_batch_payment" string="Print" type="object" 
+                            invisible="state == 'draft'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,validated,reconciled"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_payments" type="object" class="oe_stat_button" icon="fa-money">
+                            <field name="payment_count" widget="statinfo" string="Payments"/>
+                        </button>
+                        <button name="%(account.action_move_journal_line)d"
+                                type="action"
+                                class="oe_stat_button"
+                                icon="fa-book"
+                                invisible="not move_id"
+                                context="{'search_default_move_id': move_id, 'default_move_id': move_id}">
+                            <div class="o_field_widget o_stat_info">
+                                <span class="o_stat_text">Journal Entry</span>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name" string="Batch Payment Reference"/>
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="batch_type" widget="radio" options="{'horizontal': true}" readonly="state != 'draft'"/>
+                            <field name="company_id" invisible="1"/>
+                            <field name="journal_id" 
+                                   domain="[('type', 'in', ('bank', 'cash')), ('company_id', '=', company_id)]"
+                                   readonly="state != 'draft'"/>
+                            <field name="payment_method_id" 
+                                   readonly="state != 'draft'"
+                                   domain="[
+                                       ('payment_type', '=', batch_type),
+                                       ('id', 'in', batch_type == 'inbound' and journal_id.inbound_payment_method_ids or journal_id.outbound_payment_method_ids)
+                                   ]"/>
+                        </group>
+                        <group>
+                            <field name="date" readonly="state != 'draft'"/>
+                            <field name="currency_id" options="{'no_create': True}" readonly="state != 'draft'"/>
+                            <field name="amount_total" widget="monetary" readonly="1"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="move_id" readonly="1" invisible="not move_id"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Payments" name="payments">
+                            <field name="payment_ids" nolabel="1" 
+                                   readonly="state != 'draft'"
+                                   context="{
+                                       'default_payment_type': batch_type, 
+                                       'default_journal_id': journal_id, 
+                                       'default_currency_id': currency_id,
+                                       'default_payment_method_id': payment_method_id
+                                   }"
+                                   domain="[
+                                       ('state', '=', 'posted'), 
+                                       ('batch_payment_id', '=', False),
+                                       ('payment_type', '=', parent.batch_type),
+                                       ('journal_id', '=', parent.journal_id),
+                                       ('payment_method_id', '=', parent.payment_method_id),
+                                       ('currency_id', '=', parent.currency_id)
+                                   ]">
+                                <tree create="0" delete="0">
+                                    <field name="date"/>
+                                    <field name="partner_id"/>
+                                    <field name="payment_type" column_invisible="1"/>
+                                    <field name="ref"/>
+                                    <field name="amount"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                    <field name="state" widget="badge"/>
+                                    <button name="action_remove_from_batch" type="object" 
+                                            icon="fa-times" string="Remove from Batch"
+                                            invisible="parent.state != 'draft'"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_account_batch_payment_search" model="ir.ui.view">
+        <field name="name">account.batch.payment.search</field>
+        <field name="model">account.batch.payment</field>
+        <field name="arch" type="xml">
+            <search string="Batch Payments">
+                <field name="name" string="Reference"/>
+                <field name="journal_id"/>
+                <field name="payment_method_id"/>
+                <field name="date"/>
+                <separator/>
+                <filter string="Draft" name="draft" domain="[('state', '=', 'draft')]"/>
+                <filter string="Validated" name="validated" domain="[('state', '=', 'validated')]"/>
+                <filter string="Reconciled" name="reconciled" domain="[('state', '=', 'reconciled')]"/>
+                <separator/>
+                <filter string="Vendor Payments" name="outbound" domain="[('batch_type', '=', 'outbound')]"/>
+                <filter string="Customer Payments" name="inbound" domain="[('batch_type', '=', 'inbound')]"/>
+                <separator/>
+                <filter string="Date" name="date" date="date"/>
+                <group expand="0" string="Group By">
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                    <filter string="Bank Journal" name="group_journal" context="{'group_by': 'journal_id'}"/>
+                    <filter string="Payment Method" name="group_payment_method" context="{'group_by': 'payment_method_id'}"/>
+                    <filter string="Date" name="group_date" context="{'group_by': 'date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_account_batch_payment" model="ir.actions.act_window">
+        <field name="name">Batch Payments</field>
+        <field name="res_model">account.batch.payment</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_draft': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a new batch payment
+            </p>
+            <p>
+                Batch payments allow you to group multiple vendor bills or customer invoices
+                into a single payment transaction for easier processing.
+            </p>
+        </field>
+    </record>
+
+    <record id="action_account_batch_payment_out" model="ir.actions.act_window">
+        <field name="name">Batch Payments to Suppliers</field>
+        <field name="res_model">account.batch.payment</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'default_batch_type': 'outbound', 'search_default_outbound': 1}</field>
+        <field name="domain">[('batch_type', '=', 'outbound')]</field>
+    </record>
+
+    <record id="action_account_batch_payment_in" model="ir.actions.act_window">
+        <field name="name">Batch Payments from Customers</field>
+        <field name="res_model">account.batch.payment</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'default_batch_type': 'inbound', 'search_default_inbound': 1}</field>
+        <field name="domain">[('batch_type', '=', 'inbound')]</field>
+    </record>
+</odoo>
