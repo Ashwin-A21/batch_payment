@@ -25,28 +25,14 @@
         <field name="arch" type="xml">
             <form string="Batch Payment">
                 <header>
-                    <button name="action_validate_batch" string="Validate" type="object" 
-                            invisible="state != 'draft'" class="oe_highlight"/>
-                    <button name="action_draft" string="Reset to Draft" type="object" 
-                            invisible="state not in ['validated', 'reconciled']" groups="account.group_account_manager"/>
                     <button name="action_print_batch_payment" string="Print" type="object" 
-                            invisible="state == 'draft'"/>
+                            invisible="state == 'draft'" class="oe_highlight"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,validated,reconciled"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_payments" type="object" class="oe_stat_button" icon="fa-money">
                             <field name="payment_count" widget="statinfo" string="Payments"/>
-                        </button>
-                        <button name="%(account.action_move_journal_line)d"
-                                type="action"
-                                class="oe_stat_button"
-                                icon="fa-book"
-                                invisible="not move_id"
-                                context="{'search_default_move_id': move_id, 'default_move_id': move_id}">
-                            <div class="o_field_widget o_stat_info">
-                                <span class="o_stat_text">Journal Entry</span>
-                            </div>
                         </button>
                     </div>
                     <div class="oe_title">
@@ -64,17 +50,13 @@
                                    readonly="state != 'draft'"/>
                             <field name="payment_method_id" 
                                    readonly="state != 'draft'"
-                                   domain="[
-                                       ('payment_type', '=', batch_type),
-                                       ('id', 'in', batch_type == 'inbound' and journal_id.inbound_payment_method_ids or journal_id.outbound_payment_method_ids)
-                                   ]"/>
+                                   domain="[('payment_type', '=', batch_type)]"/>
                         </group>
                         <group>
                             <field name="date" readonly="state != 'draft'"/>
                             <field name="currency_id" options="{'no_create': True}" readonly="state != 'draft'"/>
                             <field name="amount_total" widget="monetary" readonly="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
-                            <field name="move_id" readonly="1" invisible="not move_id"/>
                         </group>
                     </group>
                     <notebook>
@@ -155,7 +137,7 @@
             </p>
             <p>
                 Batch payments allow you to group multiple vendor bills or customer invoices
-                into a single payment transaction for easier processing.
+                into a single payment transaction for easier processing and reconciliation.
             </p>
         </field>
     </record>

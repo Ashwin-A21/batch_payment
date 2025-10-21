@@ -51,7 +51,8 @@ class AccountBatchPayment(models.Model):
         required=True,
         tracking=True,
         readonly=True,
-        states={'draft': [('readonly', False)]}
+        states={'draft': [('readonly', False)]},
+        domain="[('payment_type', '=', batch_type)]"
     )
     
     state = fields.Selection([
@@ -95,14 +96,6 @@ class AccountBatchPayment(models.Model):
         readonly=True,
         default=lambda self: self.env.company
     )
-    
-    move_id = fields.Many2one(
-        'account.move',
-        string='Journal Entry',
-        copy=False,
-        readonly=True,
-        help='The journal entry created for this batch for reconciliation.'
-    )
 
     @api.depends('payment_ids')
     def _compute_payment_count(self):
@@ -114,22 +107,29 @@ class AccountBatchPayment(models.Model):
         for batch in self:
             batch.amount_total = sum(batch.payment_ids.mapped('amount'))
 
-    @api.depends('move_id.payment_state', 'move_id.state')
+    @api.depends('payment_ids.is_reconciled', 'payment_ids.state')
     def _compute_state(self):
         """
-        Compute the state of the batch payment based on its journal entry.
-        - draft: No move_id or move_id is in draft.
-        - validated: A move_id is present and posted.
-        - reconciled: The move_id is posted and reconciled (paid/in_payment).
+        Compute the state of the batch payment based on payment reconciliation.
+        - draft: Has no validated payments or batch is new.
+        - validated: All payments are posted/validated.
+        - reconciled: All payments are reconciled.
         """
         for batch in self:
-            if batch.move_id:
-                if batch.move_id.payment_state in ('paid', 'in_payment'):
-                    batch.state = 'reconciled'
-                elif batch.move_id.state == 'posted':
-                    batch.state = 'validated'
-                else:
-                    batch.state = 'draft' # move_id is in draft
+            if not batch.payment_ids:
+                batch.state = 'draft'
+                continue
+                
+            # Check if all payments are posted
+            all_posted = all(p.state == 'posted' for p in batch.payment_ids)
+            
+            # Check if all payments are reconciled
+            all_reconciled = all(p.is_reconciled for p in batch.payment_ids)
+            
+            if all_reconciled:
+                batch.state = 'reconciled'
+            elif all_posted:
+                batch.state = 'validated'
             else:
                 batch.state = 'draft'
 
@@ -140,111 +140,6 @@ class AccountBatchPayment(models.Model):
                 seq_code = 'account.batch.payment.out' if vals.get('batch_type') == 'outbound' else 'account.batch.payment.in'
                 vals['name'] = self.env['ir.sequence'].next_by_code(seq_code) or _('New')
         return super().create(vals_list)
-
-    def _get_batch_move_account_line(self):
-        """
-        Get the debit and credit accounts for the batch journal entry.
-        This is the core of the Enterprise-style batch payment.
-        """
-        self.ensure_one()
-        
-        if self.batch_type == 'inbound':
-            # Customer Payment:
-            # Debit: Bank (from Journal)
-            # Credit: Outstanding Receipts (from Payment Method)
-            debit_account = self.journal_id.default_account_id
-            credit_account = self.payment_method_id.payment_account_id
-            if not credit_account:
-                raise UserError(_("Payment method '%s' is missing a Payment Account (Outstanding Receipts Account).", self.payment_method_id.name))
-            if not debit_account:
-                raise UserError(_("Journal '%s' is missing a Default Account (Bank Account).", self.journal_id.name))
-        else:
-            # Vendor Payment:
-            # Debit: Outstanding Payments (from Payment Method)
-            # Credit: Bank (from Journal)
-            debit_account = self.payment_method_id.payment_account_id
-            if not debit_account:
-                raise UserError(_("Payment method '%s' is missing a Payment Account (Outstanding Payments Account).", self.payment_method_id.name))
-            credit_account = self.journal_id.default_account_id
-            if not credit_account:
-                raise UserError(_("Journal '%s' is missing a Default Account (Bank Account).", self.journal_id.name))
-                
-        return debit_account, credit_account
-
-    def _create_batch_journal_entry(self):
-        """
-        Create and post a single journal entry for the batch total.
-        This entry moves the total amount from the outstanding account to the bank.
-        """
-        self.ensure_one()
-        debit_account, credit_account = self._get_batch_move_account_line()
-        
-        move_vals = {
-            'journal_id': self.journal_id.id,
-            'date': self.date,
-            'ref': self.name,
-            'line_ids': [
-                # Debit line
-                (0, 0, {
-                    'name': self.name,
-                    'account_id': debit_account.id,
-                    'debit': self.amount_total,
-                    'credit': 0,
-                    'currency_id': self.currency_id.id,
-                }),
-                # Credit line
-                (0, 0, {
-                    'name': self.name,
-                    'account_id': credit_account.id,
-                    'debit': 0,
-                    'credit': self.amount_total,
-                    'currency_id': self.currency_id.id,
-                }),
-            ],
-        }
-        move = self.env['account.move'].create(move_vals)
-        move.action_post()
-        return move
-
-    def action_validate_batch(self):
-        """
-        Validate the batch:
-        1. Create and post the batch journal entry.
-        2. Set the batch state to 'validated'.
-        (The individual payments are already posted)
-        """
-        self.ensure_one()
-        if not self.payment_ids:
-            raise UserError(_('Please add at least one payment to the batch.'))
-        
-        if any(p.state != 'posted' for p in self.payment_ids):
-            raise UserError(_('All payments in the batch must be in a "Posted" state.'))
-        
-        move = self._create_batch_journal_entry()
-        
-        self.write({
-            'state': 'validated',
-            'move_id': move.id
-        })
-        return True
-
-    def action_draft(self):
-        """
-        Reset batch payment to draft:
-        1. Unpost and delete the batch journal entry.
-        2. Set batch state to 'draft'.
-        (This does NOT affect the individual payments, which remain posted)
-        """
-        self.ensure_one()
-        
-        # Unpost and delete the batch journal entry
-        if self.move_id:
-            if self.move_id.state == 'posted':
-                self.move_id.button_draft()
-            self.move_id.unlink()
-            
-        self.write({'state': 'draft', 'move_id': False})
-        return True
 
     def action_view_payments(self):
         """Open the list of payments in the batch"""
